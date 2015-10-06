@@ -64,9 +64,11 @@
         var that = this,
             closed = false;
 
-		this.getIndexedDB = function () {
-			return db;
-		};
+        this.name = name;
+
+    		this.getIndexedDB = function () {
+    			return db;
+    		};
 
         this.add = function( table ) {
             if ( closed ) {
@@ -212,12 +214,12 @@
         };
 
         this.close = function ( ) {
-            if ( closed ) {
-                throw 'Database has been closed';
+            // if closed, just do nothing
+            if ( !closed ) {
+              db.close();
+              closed = true;
+              delete dbCache[ name ];
             }
-            db.close();
-            closed = true;
-            delete dbCache[ name ];
         };
 
         this.get = function ( table , id ) {
@@ -251,7 +253,7 @@
             }
             var transaction = db.transaction( table ),
                 store = transaction.objectStore( table );
-        }
+        };
 
         for ( var i = 0 , il = db.objectStoreNames.length ; i < il ; i++ ) {
             (function ( storeName ) {
@@ -535,13 +537,16 @@
                   } , options.server , options.version , options.schema )
                   .then(resolve, reject)
               } else {
-                  request = getIndexedDB().open( options.server , options.version );
-
+                  // in private mode of Firefox, open will throw error.
+                  try {
+                    request = getIndexedDB().open( options.server , options.version );
+                  } catch (e) {
+                    reject(e);
+                  }
                   request.onsuccess = function ( e ) {
                       open( e , options.server , options.version , options.schema )
                           .then(resolve, reject)
                   };
-
                   request.onupgradeneeded = function ( e ) {
                       createSchema( e , options.schema , e.target.result );
                   };
@@ -549,6 +554,43 @@
                       reject( e );
                   };
               }
+            });
+        },
+
+        remove: function(server) {
+            return new Promise(function(resolve, reject) {
+              if (!server) {
+                resolve();
+                return;
+              }
+
+              var db;
+
+              if (typeof server === Server) {
+                server = server.name;
+              }
+
+              if (typeof server === 'string') {
+                db = dbCache[server];
+              }
+
+              if (typeof db.close === 'function') {
+                db.close();
+              }
+
+              var request;
+              try {
+                request = getIndexedDB().deleteDatabase(server);
+              } catch ( e ) {
+                reject( e );
+              }
+              request.onsuccess = function( e ) {
+                delete dbCache[server];
+                resolve( server );
+              };
+              request.onerror = function( e ) {
+                reject( e );
+              };
             });
         }
     };
