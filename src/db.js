@@ -25,6 +25,22 @@
         return value;
     };
 
+    var typeOf = function(o) {
+        return Object.prototype.toString.call(o).slice(8, -1).toLowerCase();
+    };
+    var isFunc = function(o) {
+        return typeof o === 'function';
+    };
+    var isNum = function(o) {
+        return typeOf(o) === 'number';
+    };
+    var isArray = function(o) {
+        return typeOf(o) === 'array';
+    };
+    var undef = function(o) {
+        return o === undefined;
+    };
+
     var CallbackList = function () {
         var state,
             list = [];
@@ -154,7 +170,7 @@
                   store['delete']( record[keyPath] );
                 });
                 transaction.oncomplete = function() {
-                  resolve();
+                  resolve([updates, deletes]);
                 };
                 transaction.onerror = function(e) {
                   reject(e);
@@ -219,7 +235,7 @@
             var transaction = db.transaction( table , transactionModes.readwrite ),
                 store = transaction.objectStore( table );
 
-            return new Promise(function(resolve, reject){ 
+            return new Promise(function(resolve, reject){
               if (!Array.isArray(keys)) {
                 keys = [keys];
               }
@@ -319,10 +335,12 @@
     var IndexQuery = function ( table , db , indexName ) {
         var that = this;
         var modifyObj = false;
+        var removeObj = false;
 
         var runQuery = function ( type, args , cursorType , direction, limitRange, filters , mapper ) {
             return new Promise(function(resolve, reject){
-              var transaction = db.transaction( table, modifyObj ? transactionModes.readwrite : transactionModes.readonly ),
+              var mode = (modifyObj || removeObj) ? transactionModes.readwrite : transactionModes.readonly;
+              var transaction = db.transaction( table, mode ),
                   store = transaction.objectStore( table ),
                   index = indexName ? store.index( indexName ) : store,
                   keyRange = type ? IDBKeyRange[ type ].apply( null, args ) : null,
@@ -369,7 +387,7 @@
                               } else if ( filter.length === 2 ) {
                                   matchFilter = matchFilter && (result[filter[0]] === filter[1])
                               } else {
-                                  if (typeof filter[0] === 'function') {
+                                  if (isFunc(filter[0])) {
                                     matchFilter = matchFilter && filter[0].apply(undefined,[result]);
                                   }
                               }
@@ -378,8 +396,10 @@
                           if (matchFilter) {
                               counter++;
                               results.push( mapper(result) );
-                              // if we're doing a modify, run it now
-                              if(modifyObj) {
+                              // if we're doing a delete or modify, run it now
+                              if (removeObj) {
+                                cursor['delete']();
+                              } else if(modifyObj) {
                                   result = modifyRecord(result);
                                   cursor.update(result);
                               }
@@ -412,16 +432,6 @@
                 return runQuery( type , args , cursorType , unique ? direction + 'unique' : direction, limitRange, filters , mapper );
             };
 
-            var limit = function () {
-                limitRange = Array.prototype.slice.call( arguments , 0 , 2 )
-                if (limitRange.length == 1) {
-                    limitRange.unshift(0)
-                }
-
-                return {
-                    execute: execute
-                };
-            };
             var count = function () {
                 direction = null;
                 cursorType = 'count';
@@ -430,74 +440,171 @@
                     execute: execute
                 };
             };
-            var keys = function () {
-                cursorType = 'openKeyCursor';
+            var limit = function () {
+                if (isArray(arguments[0])) {
+                  limitRange = arguments[0];
+                } else {
+                  limitRange = Array.prototype.slice.call( arguments , 0 , 2 );
+                }
+                if (limitRange.length == 1) {
+                    limitRange.unshift(0);
+                }
+                if (!isNum(limitRange[1])) {
+                    limitRange = null;
+                }
 
                 return {
-                    desc: desc,
                     execute: execute,
+                    count: count,
+                    keys: keys,
                     filter: filter,
+                    asc: asc,
+                    desc: desc,
                     distinct: distinct,
-                    map: map
+                    modify: modify,
+                    limit: limit,
+                    map: map,
+                    remove: remove
+                };
+            };
+            var keys = function (flag) {
+                flag = (undef(flag) ? true : !!flag);
+                if (flag) { cursorType = 'openKeyCursor'; }
+
+                return {
+                    execute: execute,
+                    // count: count,
+                    keys: keys,
+                    filter: filter,
+                    asc: asc,
+                    desc: desc,
+                    distinct: distinct,
+                    modify: modify,
+                    limit: limit,
+                    map: map,
+                    remove: remove
                 };
             };
             var filter = function ( ) {
                 filters.push( Array.prototype.slice.call( arguments , 0 , 2 ) );
 
                 return {
-                    keys: keys,
                     execute: execute,
+                    count: count,
+                    keys: keys,
                     filter: filter,
+                    asc: asc,
                     desc: desc,
                     distinct: distinct,
                     modify: modify,
                     limit: limit,
-                    map: map
+                    map: map,
+                    remove: remove
                 };
             };
-            var desc = function () {
-                direction = 'prev';
+            var asc = function(flag) {
+                flag = (undef(flag) ? true : !!flag);
+                direction = flag ? 'next' : 'prev';
 
                 return {
-                    keys: keys,
                     execute: execute,
+                    count: count,
+                    keys: keys,
                     filter: filter,
+                    asc: asc,
+                    desc: desc,
                     distinct: distinct,
                     modify: modify,
-                    map: map
+                    limit: limit,
+                    map: map,
+                    remove: remove
                 };
             };
-            var distinct = function () {
-                unique = true;
+            var desc = function (flag) {
+                flag = (undef(flag) ? true : !!flag);
+                direction = flag ? 'prev' : 'next';
+
                 return {
-                    keys: keys,
-                    count: count,
                     execute: execute,
+                    count: count,
+                    keys: keys,
                     filter: filter,
+                    asc: asc,
                     desc: desc,
+                    distinct: distinct,
                     modify: modify,
-                    map: map
+                    limit: limit,
+                    map: map,
+                    remove: remove
+                };
+            };
+            var distinct = function (flag) {
+                flag = (undef(flag) ? true : !!flag);
+                unique = flag;
+                return {
+                    execute: execute,
+                    count: count,
+                    keys: keys,
+                    filter: filter,
+                    asc: asc,
+                    desc: desc,
+                    distinct: distinct,
+                    modify: modify,
+                    limit: limit,
+                    map: map,
+                    remove: remove
                 };
             };
             var modify = function(update) {
                 modifyObj = update;
                 return {
-                    execute: execute
+                    execute: execute,
+                    count: count,
+                    keys: keys,
+                    filter: filter,
+                    asc: asc,
+                    desc: desc,
+                    distinct: distinct,
+                    modify: modify,
+                    limit: limit,
+                    map: map,
+                    remove: remove
                 };
             };
             var map = function (fn) {
-                mapper = fn;
+                if (isFunc(fn)) {
+                  mapper = fn;
+                }
 
                 return {
                     execute: execute,
                     count: count,
                     keys: keys,
                     filter: filter,
+                    asc: asc,
                     desc: desc,
                     distinct: distinct,
                     modify: modify,
                     limit: limit,
-                    map: map
+                    map: map,
+                    remove: remove
+                };
+            };
+            var remove = function(flag) {
+                flag = (undef(flag) ? true: !!flag);
+                removeObj = flag;
+                return {
+                    execute: execute,
+                    count: count,
+                    keys: keys,
+                    filter: filter,
+                    asc: asc,
+                    desc: desc,
+                    distinct: distinct,
+                    modify: modify,
+                    limit: limit,
+                    map: map,
+                    remove: remove
                 };
             };
 
@@ -506,11 +613,13 @@
                 count: count,
                 keys: keys,
                 filter: filter,
+                asc: asc,
                 desc: desc,
                 distinct: distinct,
                 modify: modify,
                 limit: limit,
-                map: map
+                map: map,
+                remove: remove
             };
         };
 
@@ -629,6 +738,9 @@
                 resolve( server );
               };
               request.onerror = function( e ) {
+                reject( e );
+              };
+              request.onblocked = function( e ) {
                 reject( e );
               };
             });
