@@ -213,6 +213,9 @@
                   req.onsuccess = function ( e ) {
                       // deferred.notify(); es6 promise can't notify
                   };
+                  req.onerror = function ( e ) {
+                      
+                  };
               } );
 
               transaction.oncomplete = function () {
