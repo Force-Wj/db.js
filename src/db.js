@@ -1,8 +1,8 @@
-(function ( window , undefined ) {
+(function ( self , undefined ) {
     'use strict';
 
     var indexedDB,
-        IDBKeyRange = window.IDBKeyRange || window.webkitIDBKeyRange,
+        IDBKeyRange = self.IDBKeyRange || self.webkitIDBKeyRange,
         transactionModes = {
             readonly: 'readonly',
             readwrite: 'readwrite'
@@ -12,7 +12,7 @@
 
     var getIndexedDB = function() {
       if ( !indexedDB ) {
-        indexedDB = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.oIndexedDB || window.msIndexedDB || ((window.indexedDB === null && window.shimIndexedDB) ? window.shimIndexedDB : undefined);
+        indexedDB = self.indexedDB || self.webkitIndexedDB || self.mozIndexedDB || self.oIndexedDB || self.msIndexedDB || ((self.indexedDB === null && self.shimIndexedDB) ? self.shimIndexedDB : undefined);
 
         if ( !indexedDB ) {
           throw 'IndexedDB required';
@@ -214,7 +214,7 @@
                       // deferred.notify(); es6 promise can't notify
                   };
                   req.onerror = function ( e ) {
-                      
+
                   };
               } );
 
@@ -755,6 +755,6 @@
     } else if ( typeof define === 'function' && define.amd ) {
         define( function() { return db; } );
     } else {
-        window.db = db;
+        self.db = db;
     }
-})( window );
+})( self );
