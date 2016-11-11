@@ -1,8 +1,23 @@
-(function ( self , undefined ) {
+(function ( window , undefined ) {
     'use strict';
 
+    function getGlobal () {
+      if (typeof window !== 'undefined') {
+        return window
+      }
+      if (typeof self !== 'undefined') {
+        return self
+      }
+      if (typeof global !== 'undefined') {
+        return global
+      }
+      return {}
+    }
+
+    window = getGlobal()
+
     var indexedDB,
-        IDBKeyRange = self.IDBKeyRange || self.webkitIDBKeyRange,
+        IDBKeyRange = window.IDBKeyRange || window.webkitIDBKeyRange,
         transactionModes = {
             readonly: 'readonly',
             readwrite: 'readwrite'
@@ -12,7 +27,7 @@
 
     var getIndexedDB = function() {
       if ( !indexedDB ) {
-        indexedDB = self.indexedDB || self.webkitIndexedDB || self.mozIndexedDB || self.oIndexedDB || self.msIndexedDB || ((self.indexedDB === null && self.shimIndexedDB) ? self.shimIndexedDB : undefined);
+        indexedDB = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.oIndexedDB || window.msIndexedDB || ((window.indexedDB === null && window.shimIndexedDB) ? window.shimIndexedDB : undefined);
 
         if ( !indexedDB ) {
           throw 'IndexedDB required';
@@ -755,6 +770,7 @@
     } else if ( typeof define === 'function' && define.amd ) {
         define( function() { return db; } );
     } else {
-        self.db = db;
+      debugger
+        window.db = db;
     }
-})( self );
+})( window );
