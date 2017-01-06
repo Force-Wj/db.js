@@ -770,7 +770,6 @@
     } else if ( typeof define === 'function' && define.amd ) {
         define( function() { return db; } );
     } else {
-      debugger
         window.db = db;
     }
 })( window );
